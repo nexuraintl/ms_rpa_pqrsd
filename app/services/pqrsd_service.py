@@ -196,7 +196,6 @@ class PQRSDRPAService:
         session = requests.Session()
 
         try:
-            # Step 1: Obtener la página para extraer __RequestVerificationToken y Cookie de sesión
             resp_get = session.get(self.radicacion_url, headers=self.headers, timeout=settings.TIMEOUT)
             if resp_get.status_code != 200:
                 return {"success": False, "message": f"No se pudo cargar la página de radicación: HTTP {resp_get.status_code}"}
@@ -207,7 +206,6 @@ class PQRSDRPAService:
 
             token = token_match.group(1)
 
-            # Step 2: Construir el payload de datos multipart
             data = {
                 "__RequestVerificationToken": token,
                 "Correspondencia.MetodoRecepcion": "Portal web",
@@ -230,7 +228,6 @@ class PQRSDRPAService:
             if not es_anonimo and numero_identificacion:
                 data["Correspondencia.RemitenteSerializado"] = numero_identificacion
 
-            # Attach files under key 'Correspondencia.Files'
             files_payload = []
             if archivos_binarios:
                 for filename, file_content, content_type in archivos_binarios:
@@ -238,7 +235,6 @@ class PQRSDRPAService:
                         ("Correspondencia.Files", (filename, file_content, content_type or "application/octet-stream"))
                     )
 
-            # Step 3: POST a GenerarRadicado
             url_generar = f"{self.radicacion_url}?handler=GenerarRadicado"
             headers_post = {
                 'User-Agent': self.headers['User-Agent'],
@@ -256,13 +252,20 @@ class PQRSDRPAService:
 
             result_json = resp_post.json()
 
-            # Neptuno returns json result containing generated radicado info
+            # Extract Item1 -> Correspondencia -> Radicado & CodigoAutenticacion
+            item1 = result_json.get("Item1") or {}
+            corresp_data = item1.get("Correspondencia") or {}
+
+            radicado_generado = corresp_data.get("Radicado") or str(corresp_data.get("Id", ""))
+            codigo_autenticacion = corresp_data.get("CodigoAutenticacion")
+            fecha_radicacion = corresp_data.get("FechaRadiacion") or corresp_data.get("FechaRadicacion")
+
             return {
                 "success": True,
-                "radicado": result_json.get("Radicado") or result_json.get("numRadicado") or str(result_json.get("Id")),
-                "codigo_autenticacion": result_json.get("CodigoAutenticacion") or result_json.get("codigo"),
-                "fecha_radicacion": result_json.get("FechaRadicacion"),
-                "message": "Radicación realizada exitosamente en el portal de Floridablanca.",
+                "radicado": radicado_generado,
+                "codigo_autenticacion": codigo_autenticacion,
+                "fecha_radicacion": fecha_radicacion,
+                "message": f"Correspondencia registrada bajo el radicado {radicado_generado}, con código de autenticación {codigo_autenticacion}",
                 "raw_response": result_json
             }
 
