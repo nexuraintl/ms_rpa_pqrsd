@@ -1,0 +1,115 @@
+# =============================================================================
+# ms_rpa_pqrsd — build y despliegue a Cloud Run
+#
+# Modo de exposición controlado por _INGRESS:
+#   all                                -> pruebas, Cloud Run directo
+#   internal-and-cloud-load-balancing  -> producción, detrás del API Gateway
+#
+# Ver docs/DEPLOY.md para los comandos de cada ambiente.
+# =============================================================================
+
+substitutions:
+  # --- Identidad del servicio ---
+  _MODULO: rpa
+  _MICROSERVICIO: pqrsd
+  # Prefijo por ambiente: qam- | prem- | prod-
+  _SERVICE_PREFIX: qam
+  _ENVIRONMENT: qa
+
+  # --- Infraestructura GCP ---
+  _REGION: us-central1
+  _AR_REPO: cloud-run
+  # Service account de ejecución del servicio (run-sa).
+  _RUN_SA: ""
+
+  # --- Exposición ---
+  # "all" solo para pruebas. Producción exige internal-and-cloud-load-balancing.
+  _INGRESS: internal-and-cloud-load-balancing
+
+  # --- Dimensionamiento ---
+  _MIN_INSTANCES: "0"
+  _MAX_INSTANCES: "10"
+  _CPU: "1"
+  _MEMORY: 512Mi
+  _CONCURRENCY: "40"
+  _TIMEOUT: "120"
+
+  # --- Configuración de la aplicación ---
+  _LOG_LEVEL: INFO
+  _CORS_ALLOW_ORIGINS: ""
+
+steps:
+  # 1. Pruebas: si fallan, no se construye la imagen.
+  - id: test
+    name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        pip install --no-cache-dir -r requirements-dev.txt
+        pytest -q
+
+  # 2. Build. El tag es el commit SHA, según el estándar.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}:${COMMIT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}:latest
+      - .
+
+  # 3. Push a Artifact Registry.
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}
+
+  # 4. Deploy a Cloud Run.
+  #    PORTAL_USER_AGENT no se envía aquí: su valor contiene comas y rompería
+  #    el parseo de --set-env-vars. El default vive en api/core/config.py.
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -e
+        SERVICE="${_SERVICE_PREFIX}-${_MODULO}-${_MICROSERVICIO}"
+
+        FLAGS=(
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}:${COMMIT_SHA}"
+          --region="${_REGION}"
+          --platform=managed
+          --ingress="${_INGRESS}"
+          --no-allow-unauthenticated
+          --min-instances="${_MIN_INSTANCES}"
+          --max-instances="${_MAX_INSTANCES}"
+          --cpu="${_CPU}"
+          --memory="${_MEMORY}"
+          --concurrency="${_CONCURRENCY}"
+          --timeout="${_TIMEOUT}"
+          --set-env-vars="SERVICE_NAME=$${SERVICE},SERVICE_VERSION=${COMMIT_SHA},ENVIRONMENT=${_ENVIRONMENT},LOG_LEVEL=${_LOG_LEVEL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},CORS_ALLOW_ORIGINS=${_CORS_ALLOW_ORIGINS},EXPOSE_RAW_RESPONSE=false"
+        )
+
+        if [ -n "${_RUN_SA}" ]; then
+          FLAGS+=(--service-account="${_RUN_SA}")
+        fi
+
+        gcloud run deploy "$${SERVICE}" "$${FLAGS[@]}"
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}:${COMMIT_SHA}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_MODULO}-${_MICROSERVICIO}:latest
+
+options:
+  machineType: E2_HIGHCPU_8
+  # Obligatorio cuando el build corre con service account propia y sin bucket
+  # de logs por defecto; sin esto el build falla al arrancar.
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s

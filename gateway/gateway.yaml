@@ -1,0 +1,182 @@
+# =============================================================================
+# Ficha de incorporación al API Gateway (ESPv2) — ms_rpa_pqrsd
+# Conforme a GOB-GCP-GOB-01.
+#
+# ANTES DE DESPLEGAR, reemplazar los marcadores:
+#   __GATEWAY_HOST__      host del gateway del ambiente
+#                         (ej. gw-prod-xxxx.uc.gateway.dev)
+#   __CLOUD_RUN_URL__     URL del Cloud Run SIN barra final
+#                         (ej. https://prod-rpa-pqrsd-abc123-uc.a.run.app)
+#   __CALLER_SA__         service account que invoca el gateway
+#                         (ej. svc-portal@mi-proyecto.iam.gserviceaccount.com)
+#
+# El audience es la URL del GATEWAY, no la del Cloud Run. El jwt_audience de
+# x-google-backend sí es la URL del Cloud Run: es el token que ESPv2 acuña
+# para invocar el backend privado.
+# =============================================================================
+
+swagger: "2.0"
+
+info:
+  title: rpa-pqrsd
+  description: RPA de consulta y radicación de PQRSD — Alcaldía de Floridablanca
+  version: 1.0.0
+
+host: __GATEWAY_HOST__
+schemes:
+  - https
+produces:
+  - application/json
+
+securityDefinitions:
+  nexura-sa:
+    type: oauth2
+    flow: implicit
+    authorizationUrl: ""
+    x-google-issuer: "__CALLER_SA__"
+    # Guión bajo en jwks_uri: con guión, ESPv2 no reconoce la extensión.
+    x-google-jwks_uri: "https://www.googleapis.com/robot/v1/metadata/x509/__CALLER_SA__"
+    x-google-audiences: "https://__GATEWAY_HOST__"
+
+paths:
+  # --- Infraestructura: sin autenticación (GOB-GCP-STD-01) -------------------
+  /rpa/pqrsd/health:
+    get:
+      operationId: getHealthRpaPqrsd
+      summary: Liveness del microservicio
+      x-google-backend:
+        address: __CLOUD_RUN_URL__/health
+        path_translation: CONSTANT_ADDRESS
+        jwt_audience: __CLOUD_RUN_URL__
+        deadline: 10.0
+      responses:
+        "200":
+          description: Servicio operativo
+
+  /rpa/pqrsd/version:
+    get:
+      operationId: getVersionRpaPqrsd
+      summary: Versión y ambiente desplegados
+      x-google-backend:
+        address: __CLOUD_RUN_URL__/version
+        path_translation: CONSTANT_ADDRESS
+        jwt_audience: __CLOUD_RUN_URL__
+        deadline: 10.0
+      responses:
+        "200":
+          description: Metadatos del despliegue
+
+  # --- Negocio: autenticado por operación ------------------------------------
+  /rpa/pqrsd/v1/catalogos:
+    get:
+      operationId: obtenerCatalogosPqrsd
+      summary: Catálogos y listas desplegables del portal
+      security:
+        - nexura-sa: []
+      parameters:
+        - name: refrescar
+          in: query
+          required: false
+          type: boolean
+      x-google-backend:
+        address: __CLOUD_RUN_URL__/v1/pqrsd/catalogos
+        path_translation: CONSTANT_ADDRESS
+        jwt_audience: __CLOUD_RUN_URL__
+        # El portal es lento en frío; por debajo de 45 s el gateway corta
+        # antes que el propio microservicio.
+        deadline: 60.0
+      responses:
+        "200":
+          description: Catálogos obtenidos
+        "502":
+          description: Portal Neptuno no disponible
+
+  /rpa/pqrsd/v1/consultar:
+    post:
+      operationId: consultarPqrsd
+      summary: Consultar una PQRSD por radicado y código
+      security:
+        - nexura-sa: []
+      consumes:
+        - application/json
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            required: [radicado, codigo_autenticacion]
+            properties:
+              radicado:
+                type: string
+              codigo_autenticacion:
+                type: string
+      x-google-backend:
+        address: __CLOUD_RUN_URL__/v1/pqrsd/consultar
+        path_translation: CONSTANT_ADDRESS
+        jwt_audience: __CLOUD_RUN_URL__
+        deadline: 60.0
+      responses:
+        "200":
+          description: Consulta procesada
+        "502":
+          description: Portal Neptuno no disponible
+
+  /rpa/pqrsd/v1/crear:
+    post:
+      operationId: crearPqrsd
+      summary: Radicar una PQRSD en el portal oficial
+      security:
+        - nexura-sa: []
+      consumes:
+        - multipart/form-data
+      parameters:
+        - name: asunto
+          in: formData
+          required: true
+          type: string
+        - name: email
+          in: formData
+          required: true
+          type: string
+        - name: telefono_celular
+          in: formData
+          required: true
+          type: string
+        - name: tipo_correspondencia_json_str
+          in: formData
+          required: false
+          type: string
+        - name: dependencia_json_str
+          in: formData
+          required: false
+          type: string
+        - name: es_anonimo
+          in: formData
+          required: false
+          type: boolean
+        - name: numero_identificacion
+          in: formData
+          required: false
+          type: string
+        - name: placa
+          in: formData
+          required: false
+          type: string
+        - name: archivos
+          in: formData
+          required: false
+          type: file
+      x-google-backend:
+        address: __CLOUD_RUN_URL__/v1/pqrsd/crear
+        path_translation: CONSTANT_ADDRESS
+        jwt_audience: __CLOUD_RUN_URL__
+        # La radicación sube anexos y espera al portal: es la operación más lenta.
+        deadline: 120.0
+      responses:
+        "200":
+          description: Radicado generado
+        "413":
+          description: Anexos superan el límite permitido
+        "502":
+          description: Portal Neptuno no disponible

@@ -1,10 +1,23 @@
+# Entornos y secretos
+.env
+.env.*
+!.env.example
 .venv/
+venv/
+
+# Bytecode y cachés
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editores
 .vscode/
 .idea/
+
+# Artefactos de depuración del RPA
 page_dump.html
 scratch*.py

@@ -1,0 +1,467 @@
+openapi: 3.1.0
+info:
+  title: ms-rpa-pqrsd
+  description: Microservicio RPA para consulta y radicación de PQRSD en el Portal
+    Suite Neptuno de la Alcaldía de Floridablanca.
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      tags:
+      - infra
+      summary: Health
+      operationId: getHealth
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /version:
+    get:
+      tags:
+      - infra
+      summary: Version
+      operationId: getVersion
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+  /v1/pqrsd/catalogos:
+    get:
+      tags:
+      - PQRSD
+      summary: Obtener listas desplegables y catálogos
+      description: Consulta desde el portal Neptuno los tipos de correspondencia,
+        dependencias/áreas y listas de caracterización. El resultado se cachea en
+        memoria durante CATALOGOS_CACHE_TTL_SECONDS.
+      operationId: obtenerCatalogosPqrsd
+      parameters:
+      - name: refrescar
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+          title: Refrescar
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogosResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/pqrsd/consultar:
+    post:
+      tags:
+      - PQRSD
+      summary: Consultar PQRSD por radicado y código
+      description: Consulta el portal Neptuno y retorna estado, datos, anexos y flujo
+        de trazabilidad del radicado.
+      operationId: consultarPqrsd
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConsultaPQRSDRequest'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultaPQRSDResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+  /v1/pqrsd/crear:
+    post:
+      tags:
+      - PQRSD
+      summary: Crear/radicar PQRSD en Neptuno
+      description: Radica una PQRSD en el portal oficial. Admite radicación anónima
+        o identificada y archivos anexos.
+      operationId: crearPqrsd
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Body_crearPqrsd'
+        required: true
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrearPQRSDResponse'
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+components:
+  schemas:
+    Body_crearPqrsd:
+      properties:
+        tipo_correspondencia_json_str:
+          type: string
+          title: Tipo Correspondencia Json Str
+          description: Objeto JSON del tipo de correspondencia
+          default: '{"Id":6,"Nombre":"Petición"}'
+        dependencia_json_str:
+          type: string
+          title: Dependencia Json Str
+          description: Objeto JSON del área/dependencia destinataria
+          default: '{"Id":1,"Nombre":"Despacho"}'
+        asunto:
+          type: string
+          minLength: 1
+          title: Asunto
+          description: Asunto o contenido detallado de la solicitud
+        email:
+          type: string
+          minLength: 1
+          title: Email
+          description: Correo electrónico de contacto
+        telefono_celular:
+          type: string
+          minLength: 1
+          title: Telefono Celular
+          description: Teléfono celular de contacto
+        es_anonimo:
+          type: boolean
+          title: Es Anonimo
+          description: True si es radicación anónima
+          default: true
+        numero_identificacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Numero Identificacion
+          description: Número de documento (si es_anonimo=False)
+        placa:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Placa
+          description: Placa del vehículo (opcional)
+        archivos:
+          items:
+            type: string
+            contentMediaType: application/octet-stream
+          type: array
+          title: Archivos
+          description: Archivos anexos
+          default: []
+      type: object
+      required:
+      - asunto
+      - email
+      - telefono_celular
+      title: Body_crearPqrsd
+    CatalogosResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+          description: Detalle si algún catálogo no pudo obtenerse del portal
+        tipos_correspondencia:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Tipos Correspondencia
+          description: Tipos de PQRSD (Petición, Queja, etc.)
+        dependencias_areas:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Dependencias Areas
+          description: Áreas destinatarias (Despacho, Jurídica, etc.)
+        condiciones_discapacidad:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Condiciones Discapacidad
+        grupos_etnicos:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Grupos Etnicos
+        grupos_interes:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Grupos Interes
+        atencion_preferencial:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Atencion Preferencial
+        medios_respuesta:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Medios Respuesta
+      type: object
+      required:
+      - success
+      title: CatalogosResponse
+    ConsultaPQRSDRequest:
+      properties:
+        radicado:
+          type: string
+          maxLength: 64
+          minLength: 1
+          title: Radicado
+          description: Número de radicado de la correspondencia/PQRSD
+          examples:
+          - '2026488450'
+        codigo_autenticacion:
+          type: string
+          maxLength: 128
+          minLength: 1
+          title: Codigo Autenticacion
+          description: Código de autenticación entregado al radicar
+          examples:
+          - 202UhXbRIu2026488450
+      type: object
+      required:
+      - radicado
+      - codigo_autenticacion
+      title: ConsultaPQRSDRequest
+    ConsultaPQRSDResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+          description: Indica si la solicitud a la plataforma fue exitosa
+        found:
+          type: boolean
+          title: Found
+          description: Indica si se encontró información para el radicado
+        message:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Message
+          description: Mensaje informativo o de error
+        datos_correspondencia:
+          anyOf:
+          - $ref: '#/components/schemas/DatosCorrespondencia'
+          - type: 'null'
+          description: Datos principales de la correspondencia
+        anexos:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Anexos
+          description: Lista de anexos asociados
+        flujo:
+          items:
+            additionalProperties: true
+            type: object
+          type: array
+          title: Flujo
+          description: Historial de flujo de correspondencia
+      type: object
+      required:
+      - success
+      - found
+      title: ConsultaPQRSDResponse
+    CrearPQRSDResponse:
+      properties:
+        success:
+          type: boolean
+          title: Success
+          description: Indica si la radicación fue exitosa
+        radicado:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Radicado
+          description: Número de radicado asignado por Neptuno
+        codigo_autenticacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Codigo Autenticacion
+          description: Código de autenticación generado para consulta
+        fecha_radicacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fecha Radicacion
+          description: Fecha y hora de radicación
+        message:
+          type: string
+          title: Message
+          description: Mensaje devuelto por la plataforma
+        raw_response:
+          anyOf:
+          - additionalProperties: true
+            type: object
+          - type: 'null'
+          title: Raw Response
+          description: Respuesta completa del portal. Solo se incluye si EXPOSE_RAW_RESPONSE
+            está habilitado; contiene datos personales del ciudadano.
+      type: object
+      required:
+      - success
+      - message
+      title: CrearPQRSDResponse
+    DatosCorrespondencia:
+      properties:
+        id:
+          anyOf:
+          - type: integer
+          - type: 'null'
+          title: Id
+          description: ID interno de la correspondencia
+        radicado:
+          type: string
+          title: Radicado
+          description: Número de radicado
+        estado:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Estado
+          description: Estado de la correspondencia
+        tipo_correspondencia:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Tipo Correspondencia
+          description: Tipo de correspondencia
+        fecha_radicacion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Fecha Radicacion
+          description: Fecha de radicación del trámite
+        metodo_recepcion:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Metodo Recepcion
+          description: Método de recepción
+        remitente:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Remitente
+          description: Nombre del remitente
+        email:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Email
+          description: Email del remitente
+        asunto:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Asunto
+          description: Asunto de la correspondencia
+        respuesta:
+          anyOf:
+          - type: string
+          - type: 'null'
+          title: Respuesta
+          description: Respuesta dada al radicado
+      type: object
+      required:
+      - radicado
+      title: DatosCorrespondencia
+    HTTPValidationError:
+      properties:
+        detail:
+          items:
+            $ref: '#/components/schemas/ValidationError'
+          type: array
+          title: Detail
+      type: object
+      title: HTTPValidationError
+    HealthResponse:
+      properties:
+        status:
+          type: string
+          title: Status
+          examples:
+          - UP
+      type: object
+      required:
+      - status
+      title: HealthResponse
+    ValidationError:
+      properties:
+        loc:
+          items:
+            anyOf:
+            - type: string
+            - type: integer
+          type: array
+          title: Location
+        msg:
+          type: string
+          title: Message
+        type:
+          type: string
+          title: Error Type
+        input:
+          title: Input
+        ctx:
+          type: object
+          title: Context
+      type: object
+      required:
+      - loc
+      - msg
+      - type
+      title: ValidationError
+    VersionResponse:
+      properties:
+        service:
+          type: string
+          title: Service
+        version:
+          type: string
+          title: Version
+        environment:
+          type: string
+          title: Environment
+      type: object
+      required:
+      - service
+      - version
+      - environment
+      title: VersionResponse

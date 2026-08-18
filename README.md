@@ -1,40 +1,112 @@
-# Microservicio RPA PQRSD - Alcaldía de Floridablanca (Suite Neptuno)
+# ms_rpa_pqrsd — Microservicio RPA PQRSD (Alcaldía de Floridablanca)
 
-Microservicio en **FastAPI** para la automatización e integración (RPA) del Portal de Correspondencia y PQRSD de la Alcaldía Municipal de Floridablanca.
+Microservicio **FastAPI sobre Cloud Run** que automatiza la interacción con el
+Portal de Correspondencia y PQRSD de la Alcaldía de Floridablanca (Suite
+Neptuno), que no expone una API oficial.
 
----
-
-## 📌 Funcionalidades
-
-### 1. Obtener Catálogos y Desplegables (`GET /api/v1/pqrsd/catalogos`)
-Consulta en tiempo real desde el portal Neptuno los desplegables necesarios para llenar el formulario:
-- **Tipos de correspondencia** (Petición, Queja, Reclamo, etc.) con sus IDs.
-- **Áreas / Dependencias destinatarias** (Despacho, Asesora Jurídica, etc.).
-- Listas de caracterización poblacional y medios de respuesta.
-
-### 2. Consultar PQRSD (`POST /api/v1/pqrsd/consultar`)
-- Recibe `radicado` y `codigo_autenticacion` (**Imagen 1**).
-- Extrae y retorna todos los datos (**Imagen 2**): Estado, Tipo, Fecha, Remitente, Email, Asunto, Respuesta, Anexos y Flujo de trazabilidad.
-
-### 3. Crear / Radicar PQRSD (`POST /api/v1/pqrsd/crear`)
-- Procesa la radicación oficial en el portal enviando la información a `?handler=GenerarRadicado`.
-- Soporta radicación **anónima** o **identificada** con número de documento.
-- Permite adjuntar archivos físicos reales (`archivos`: UploadFile).
+Cumple el estándar de Gobernanza GCP de NEXURA **GOB-GCP-STD-01**.
 
 ---
 
-## 🛠️ Instalación y Ejecución
+## Funcionalidades
 
-```bash
-# Crear e ingresar al entorno virtual
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+| Endpoint | Método | Descripción |
+|---|---|---|
+| `/v1/pqrsd/catalogos` | GET | Tipos de PQRSD, dependencias y listas de caracterización |
+| `/v1/pqrsd/consultar` | POST | Estado, datos, anexos y flujo de un radicado |
+| `/v1/pqrsd/crear` | POST | Radica una PQRSD (anónima o identificada, con anexos) |
+| `/health` | GET | Liveness |
+| `/version` | GET | Servicio, versión y ambiente |
 
-# Instalación de dependencias
-pip install -r requirements.txt
+Detalle de integración para clientes y agentes: [`AGENT_GUIDE.md`](AGENT_GUIDE.md).
 
-# Iniciar servidor FastAPI
-uvicorn app.main:app --reload --port 8000
+---
+
+## Estructura
+
+```
+api/
+├── main.py                setup y registro de routers
+├── core/
+│   ├── config.py          pydantic-settings + get_settings() cacheado
+│   ├── logging.py         JSON a stdout con severity y trace
+│   └── middleware.py      Correlation-ID y trace context
+├── models/schemas.py      contratos Pydantic
+├── routers/
+│   ├── health.py          /health y /version (sin /v1)
+│   └── v1/pqrsd.py        endpoints de negocio
+└── services/pqrsd_service.py   cliente httpx del portal Neptuno
+
+docs/MANUAL.md             manual operativo (GOB-GCP-STD-01)
+docs/DEPLOY.md             despliegue: Cloud Run directo y API Gateway
+gateway/gateway.yaml       ficha ESPv2 para el API Gateway
+openapi/openapi.yaml       contrato exportado
+cloudbuild.yaml            build y deploy
 ```
 
-Acceso a Swagger UI: [http://localhost:8000/docs](http://localhost:8000/docs)
+---
+
+## Desarrollo local
+
+```bash
+python -m venv .venv && .venv/Scripts/Activate.ps1
+```
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+```bash
+cp .env.example .env
+```
+
+```bash
+uvicorn api.main:app --reload --port 8000
+```
+
+Swagger UI en <http://localhost:8000/docs>.
+
+### Pruebas
+
+```bash
+pytest
+```
+
+Ninguna prueba sale a la red: el portal se simula con `httpx.MockTransport`.
+
+### Regenerar el contrato OpenAPI
+
+```bash
+python scripts/export_openapi.py
+```
+
+---
+
+## Docker
+
+```bash
+docker build -t rpa-pqrsd .
+```
+
+```bash
+docker run --rm -p 8080:8080 --env-file .env rpa-pqrsd
+```
+
+La imagen respeta `$PORT` y corre como usuario sin privilegios.
+
+---
+
+## Despliegue
+
+Ver [`docs/DEPLOY.md`](docs/DEPLOY.md). Dos modos desde el mismo pipeline:
+
+- **Cloud Run directo** (`_INGRESS=all`) para pruebas.
+- **API Gateway** (`_INGRESS=internal-and-cloud-load-balancing`) para producción.
+
+---
+
+## Advertencia operativa
+
+Este servicio **radica trámites reales** en el portal de la Alcaldía. La
+radicación no se reintenta automáticamente y el servicio nunca debe desplegarse
+con `--allow-unauthenticated`.

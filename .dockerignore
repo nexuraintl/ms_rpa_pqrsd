@@ -1,0 +1,39 @@
+# Control de versiones
+.git
+.gitignore
+.github
+
+# Secretos y entornos locales
+.env
+.env.*
+!.env.example
+.venv
+venv
+
+# Bytecode y cachés
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Pruebas y utilidades que no van a la imagen
+tests
+scripts
+requirements-dev.txt
+
+# Documentación y contratos
+docs
+openapi
+gateway
+*.md
+
+# Herramientas de editor / agentes
+.vscode
+.idea
+.claude
+
+# Artefactos de depuración del RPA
+page_dump.html
+scratch*.py
