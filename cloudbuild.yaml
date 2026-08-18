@@ -20,7 +20,7 @@ substitutions:
   _REGION: us-central1
   _AR_REPO: cloud-run
   # Service account de ejecución del servicio (run-sa).
-  _RUN_SA: ""
+  _RUN_SA: "run-sa@pre-qa-functions.iam.gserviceaccount.com"
 
   # --- Exposición ---
   # "all" solo para pruebas. Producción exige internal-and-cloud-load-balancing.
