@@ -39,10 +39,10 @@ puede degradar el servicio; ver sección 8.
 | Elemento | Valor |
 |---|---|
 | Runtime | FastAPI (Python 3.12) sobre Cloud Run |
-| Proyecto GCP (QAM) | ⟨PENDIENTE⟩ |
+| Proyecto GCP (QAM) | `pre-qa-functions` |
 | Proyecto GCP (PREM) | ⟨PENDIENTE⟩ |
 | Proyecto GCP (PROD) | ⟨PENDIENTE⟩ |
-| Región | ⟨PENDIENTE — `cloudbuild.yaml` trae `us-central1` como valor por defecto⟩ |
+| Región | `us-central1` (Iowa) |
 | Servicio Cloud Run | `qam-rpa-pqrsd` / `prem-rpa-pqrsd` / `prod-rpa-pqrsd` |
 | Imagen | `REGION-docker.pkg.dev/PROJECT/cloud-run/rpa-pqrsd:COMMIT_SHA` |
 | Gateway | ⟨PENDIENTE⟩, path `/rpa/pqrsd/...` |
@@ -126,8 +126,8 @@ Plantilla completa con comentarios en [`.env.example`](../.env.example).
 
 | Rol | Service Account | Permisos |
 |---|---|---|
-| Ejecución (`run-sa`) | ⟨PENDIENTE⟩ | Ninguno adicional: no accede a otros servicios GCP |
-| Despliegue (`deploy-sa`) | ⟨PENDIENTE⟩ | `roles/run.admin`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser` |
+| Ejecución (`run-sa`) | `run-sa@pre-qa-functions.iam.gserviceaccount.com` | Ninguno adicional: no accede a otros servicios GCP |
+| Despliegue (`deploy-sa`) | `deploy-sa@pre-qa-functions.iam.gserviceaccount.com` | `roles/run.admin`, `roles/artifactregistry.writer`, `roles/iam.serviceAccountUser` |
 | Invocación (gateway) | ⟨PENDIENTE⟩ | `roles/run.invoker` sobre el servicio |
 
 El `run-sa` de este servicio no necesita `roles/secretmanager.secretAccessor`
