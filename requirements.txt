@@ -5,3 +5,7 @@ uvicorn[standard]==0.51.0
 pydantic==2.13.4
 pydantic-settings==2.15.0
 httpx==0.28.1
+# Requerido por FastAPI para Form(...) y UploadFile en /v1/pqrsd/crear.
+# FastAPI no lo declara como dependencia propia: sin él, el registro de la ruta
+# lanza RuntimeError al importar la app y el contenedor no arranca.
+python-multipart==0.0.32
