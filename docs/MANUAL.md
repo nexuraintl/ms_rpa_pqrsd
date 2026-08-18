@@ -247,7 +247,7 @@ si el radicado quedó creado **antes** de reintentar.
 | `openapi/openapi.yaml` exportado | ✅ |
 | `scripts/export_openapi.py` | ✅ |
 | `cloudbuild.yaml` con `$COMMIT_SHA` y sustituciones | ✅ |
-| `azure-pipelines.yml` | ➖ Gestionado fuera de este repositorio |
+| `.azure-pipelines.yml` | ✅ Presente — bridge ADO→GitHub (`nexuraintl/ms_rpa_pqrsd`) |
 | Ingress `internal-and-cloud-load-balancing` en PROD | ✅ Configurado; pendiente de aplicar en el despliegue |
 | Secretos en Secret Manager | ➖ No aplica: el servicio no usa credenciales |
 | `docs/MANUAL.md` completo | ⚠️ Pendiente de los campos ⟨PENDIENTE⟩ |

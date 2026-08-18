@@ -207,3 +207,27 @@ sistema de terceros.
 **Timeouts.** El `deadline` del gateway debe ser mayor que el tiempo del portal.
 Los valores en `gateway/gateway.yaml` (60 s consulta, 120 s radicación) están
 por encima de `HTTP_TIMEOUT_SECONDS=30` con margen para reintentos.
+
+---
+
+## Flujo de CI/CD
+
+El repositorio vive en Azure DevOps y se sincroniza a GitHub, desde donde
+dispara Cloud Build:
+
+```
+Azure DevOps (rama qa)
+      ↓  .azure-pipelines.yml
+GitHub nexuraintl/ms_rpa_pqrsd (misma rama, push --force)
+      ↓  trigger de Cloud Build
+Cloud Build → Artifact Registry → Cloud Run
+```
+
+`.azure-pipelines.yml` dispara con `dev`, `qa`, `master` y `main`, y sincroniza
+la rama con **`git push --force`**. Consecuencias a tener presentes:
+
+- Azure DevOps es la fuente de verdad. Cualquier commit hecho directamente en
+  el GitHub de la organización se pierde en la siguiente sincronización.
+- El pipeline requiere la variable `GITHUB_TOKEN_NEXURAINTL` y que el
+  repositorio exista en la organización; si no existe, el build falla en el
+  paso de validación.
