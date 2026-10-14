@@ -1,0 +1,28 @@
+# azure-pipelines.yml — ms_rpa_pqrsd
+#
+# Despliegue directo a Cloud Run via Workload Identity Federation (WIF), sin GitHub.
+# El trigger dispara segun la rama que RECIBE el push (rama destino de un PR fusionado):
+#   qa     -> Cloud Run QA            (qam-rpa-pqrsd)
+# Pasos en ci/deploy-cloudrun-wif.yml; build+deploy en Cloud Build (cloudbuild.yaml).
+
+trigger:
+  branches:
+    include:
+      - qa
+
+pool:
+  vmImage: "ubuntu-latest"
+
+jobs:
+  - ${{ if eq(variables['Build.SourceBranch'], 'refs/heads/qa') }}:
+      - job: DeployQA
+        displayName: 'Desplegar a QA (WIF, sin GitHub)'
+        steps:
+          - template: ci/deploy-cloudrun-wif.yml
+            parameters:
+              serviceConnection: gcp-pre-qa-functions
+              projectId: pre-qa-functions
+              serviceName: qam-rpa-pqrsd
+              arProjectId: pre-qa-functions
+              arRepository: cloud-run-source-deploy
+              cloudbuildFile: cloudbuild-ado.yaml
