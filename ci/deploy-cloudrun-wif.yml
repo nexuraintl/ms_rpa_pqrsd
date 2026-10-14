@@ -1,0 +1,67 @@
+# Pasos de despliegue a Cloud Run por Workload Identity Federation (sin llaves, sin GitHub).
+# Los usa azure-pipelines.yml; solo cambian los parametros por ambiente.
+#
+# Flujo: GcpWifAuth@0 (token OIDC de ADO -> GCP) -> gcloud builds submit (el fuente se
+# sube como tarball; Cloud Build NO queda conectado a ningun repo) -> Cloud Build ejecuta
+# cloudbuild.yaml como deploy-sa -> 'gcloud run services update --image'.
+#
+# IMPORTANTE:
+#  - cloudbuild.yaml hace 'services update': el servicio de Cloud Run DEBE EXISTIR ya
+#    (con sus variables de entorno, secretos, service account y escalado). Este pipeline
+#    solo cambia la imagen; nada sensible vive en el repo.
+#  - cloudbuild.yaml usa ${REPO_NAME} y ${COMMIT_SHA}, que solo rellenan los triggers de
+#    Cloud Build. Con 'builds submit' hay que pasarlos explicitos (abajo), o la ruta de la
+#    imagen queda con '//' y el tag vacio.
+#  - --gcs-source-staging-dir explicito: evita que gcloud liste buckets del proyecto
+#    (storage.buckets.list), permiso que la SA federada no tiene ni debe tener.
+
+parameters:
+  - name: serviceConnection       # service connection "Google Cloud (WIF)" de ADO
+    type: string
+  - name: projectId               # proyecto GCP donde corre el build y el servicio
+    type: string
+  - name: serviceName             # servicio de Cloud Run a actualizar
+    type: string
+  - name: arProjectId             # proyecto del Artifact Registry
+    type: string
+  - name: arRepository            # repositorio de Artifact Registry
+    type: string
+  - name: cloudbuildFile          # archivo de Cloud Build a ejecutar
+    type: string
+    default: cloudbuild.yaml
+  - name: region
+    type: string
+    default: us-central1
+  - name: buildServiceAccount     # SA que EJECUTA el build (no la federada)
+    type: string
+    default: deploy-sa
+
+steps:
+  - checkout: self
+    clean: true
+
+  - task: GcpWifAuth@0
+    displayName: '[WIF] Autenticar en GCP (sin llaves)'
+    inputs:
+      connectedServiceId: ${{ parameters.serviceConnection }}
+
+  - bash: |
+      set -euo pipefail
+      gcloud config set project "${{ parameters.projectId }}"
+      gcloud auth print-access-token > /dev/null && echo "TOKEN OK (identidad federada activa)"
+    displayName: '[WIF] Verificar credencial'
+
+  - bash: |
+      set -euo pipefail
+      echo "Proyecto ....: ${{ parameters.projectId }}"
+      echo "Servicio ....: ${{ parameters.serviceName }}"
+      echo "Registro ....: ${{ parameters.region }}-docker.pkg.dev/${{ parameters.arProjectId }}/${{ parameters.arRepository }}"
+      echo "Commit ......: $(Build.SourceVersion)"
+
+      gcloud builds submit \
+        --config=${{ parameters.cloudbuildFile }} \
+        --gcs-source-staging-dir="gs://${{ parameters.projectId }}_cloudbuild/source" \
+        --substitutions="_SERVICE_NAME=${{ parameters.serviceName }},_AR_PROJECT_ID=${{ parameters.arProjectId }},_AR_REPOSITORY=${{ parameters.arRepository }},_DEPLOY_REGION=${{ parameters.region }},_TRIGGER_ID=ado-$(Build.BuildId),REPO_NAME=$(Build.Repository.Name),COMMIT_SHA=$(Build.SourceVersion)" \
+        --service-account="projects/${{ parameters.projectId }}/serviceAccounts/${{ parameters.buildServiceAccount }}@${{ parameters.projectId }}.iam.gserviceaccount.com" \
+        --project="${{ parameters.projectId }}"
+    displayName: '[WIF] Build + deploy via cloudbuild.yaml (sin repo conectado)'
